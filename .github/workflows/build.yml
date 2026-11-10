@@ -1,0 +1,57 @@
+# Compiles the app and runs the tests on one of GitHub's Macs every time you upload a change.
+# It does not sign or release anything. Open the run, and any compile errors are listed on its summary page.
+name: Build and test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project RaiseTheBar.xcodeproj -scheme RaiseTheBar \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+
+      - name: Test
+        run: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [^(]*' | sed 's/ *$//')
+          echo "Testing on: $DEVICE"
+          xcodebuild test \
+            -project RaiseTheBar.xcodeproj -scheme RaiseTheBar \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+
+      - name: List errors on the summary page
+        if: always()
+        run: |
+          {
+            echo "### Errors"
+            echo '```'
+            cat build.log test.log 2>/dev/null | grep -E "error:|failed -|\*\* (BUILD|TEST) " | sort -u | head -80 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the full logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            build.log
+            test.log
+          if-no-files-found: ignore

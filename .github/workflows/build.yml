@@ -36,6 +36,23 @@ jobs:
             -destination "platform=iOS Simulator,name=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
 
+      - name: Make a simulator copy for Appetize
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project RaiseTheBar.xcodeproj -scheme RaiseTheBar -configuration Debug \
+            -sdk iphonesimulator -derivedDataPath sim \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+          cd sim/Build/Products/Debug-iphonesimulator
+          ditto -c -k --sequesterRsrc --keepParent RaiseTheBar.app "$GITHUB_WORKSPACE/RaiseTheBar-simulator.zip"
+
+      - name: Keep the simulator copy
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaiseTheBar-simulator
+          path: RaiseTheBar-simulator.zip
+
       - name: List errors on the summary page
         if: always()
         run: |
